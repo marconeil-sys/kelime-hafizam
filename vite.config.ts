@@ -2,15 +2,17 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { defineConfig } from 'vitest/config';
 
-function githubPagesBase(): string {
-  const explicitBase = process.env.VITE_BASE_PATH;
+export function githubPagesBase(
+  repository = process.env.GITHUB_REPOSITORY,
+  explicitBase = process.env.VITE_BASE_PATH,
+): string {
   if (explicitBase) {
     return explicitBase.endsWith('/') ? explicitBase : `${explicitBase}/`;
   }
 
-  const repository = process.env.GITHUB_REPOSITORY?.split('/')[1];
-  if (!repository || repository.endsWith('.github.io')) return '/';
-  return `/${repository}/`;
+  const repositoryName = repository?.split('/')[1];
+  if (!repositoryName || repositoryName.endsWith('.github.io')) return '/';
+  return `/${repositoryName}/`;
 }
 
 export default defineConfig({

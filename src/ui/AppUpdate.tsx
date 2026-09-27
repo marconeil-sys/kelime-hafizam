@@ -5,6 +5,17 @@ interface UpdateGuardValue {
   setLearningSessionActive: (active: boolean) => void;
 }
 
+interface ServiceWorkerCallbacks {
+  immediate: boolean;
+  onNeedRefresh: () => void;
+  onOfflineReady: () => void;
+  onRegisterError: (error: unknown) => void;
+}
+
+export type RegisterServiceWorker = (
+  callbacks: ServiceWorkerCallbacks,
+) => (reloadPage?: boolean) => Promise<void>;
+
 const UpdateGuardContext = createContext<UpdateGuardValue | null>(null);
 
 export function AppUpdateProvider({ children }: { children: ReactNode }) {
@@ -29,16 +40,21 @@ export function useBlockAppUpdatesWhile(active: boolean): void {
   }, [active, setLearningSessionActive]);
 }
 
-export function AppUpdatePrompt() {
+export function AppUpdatePrompt({
+  registerServiceWorker,
+}: {
+  registerServiceWorker?: RegisterServiceWorker;
+} = {}) {
   const context = useContext(UpdateGuardContext);
   const [needRefresh, setNeedRefresh] = useState(false);
   const [offlineReady, setOfflineReady] = useState(false);
   const [updateApp, setUpdateApp] = useState<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
-    if (import.meta.env.MODE === 'test') return;
+    if (import.meta.env.MODE === 'test' && !registerServiceWorker) return;
     let active = true;
-    void import('virtual:pwa-register').then(({ registerSW }) => {
+    const setup = async () => {
+      const registerSW = registerServiceWorker ?? (await import('virtual:pwa-register')).registerSW;
       const updateSW = registerSW({
         immediate: true,
         onNeedRefresh() {
@@ -52,11 +68,12 @@ export function AppUpdatePrompt() {
         },
       });
       if (active) setUpdateApp(() => async () => updateSW(true));
-    });
+    };
+    void setup();
     return () => {
       active = false;
     };
-  }, []);
+  }, [registerServiceWorker]);
 
   if (!needRefresh && !offlineReady) return null;
 
