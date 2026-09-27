@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Kelime Hafızam</title>
+  <desc id="desc">Mor zemin üzerinde açık kitap ve konuşma işareti</desc>
+  <defs>
+    <linearGradient id="bg" x1="68" y1="38" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#312E81"/>
+      <stop offset="0.55" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <filter id="shadow" x="80" y="98" width="352" height="324" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1E1B4B" flood-opacity=".3"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="416" cy="94" r="58" fill="#fff" opacity=".08"/>
+  <circle cx="78" cy="430" r="92" fill="#fff" opacity=".06"/>
+  <g filter="url(#shadow)">
+    <path d="M116 153c0-18 15-33 33-33h73c18 0 34 8 45 21 11-13 27-21 45-21h51c18 0 33 15 33 33v211c0 12-13 20-24 14-19-11-40-16-63-16h-37c-3 0-5-2-5-5V181c0-3-2-5-5-5s-5 2-5 5v176c0 3-2 5-5 5h-49c-23 0-44 5-63 16-11 6-24-2-24-14V153Z" fill="#fff"/>
+    <path d="M267 181v176" stroke="#C7D2FE" stroke-width="12" stroke-linecap="round"/>
+  </g>
+  <path d="M154 192h62M154 232h62M154 272h44" stroke="#6366F1" stroke-width="17" stroke-linecap="round"/>
+  <path d="M316 192h30M316 232h42" stroke="#8B5CF6" stroke-width="17" stroke-linecap="round"/>
+  <path d="M336 286c0-13 11-24 24-24h36c13 0 24 11 24 24v17c0 13-11 24-24 24h-8l-18 17v-17h-10c-13 0-24-11-24-24v-17Z" fill="#FBBF24"/>
+  <circle cx="365" cy="295" r="5" fill="#78350F"/>
+  <circle cx="380" cy="295" r="5" fill="#78350F"/>
+  <circle cx="395" cy="295" r="5" fill="#78350F"/>
+</svg>
+
