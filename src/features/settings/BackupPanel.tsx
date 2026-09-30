@@ -1,55 +1,49 @@
 import { useRef, useState, type ChangeEvent } from 'react';
 
-import {
-  backupFileName,
-  buildBackup,
-  recordBackupCreated,
-  restoreBackup,
-} from '../../db/backup';
+import { restoreBackup } from '../../db/backup';
 import { clearAllData } from '../../db/repo';
-
-function downloadFile(file: File): void {
-  const url = URL.createObjectURL(file);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = file.name;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
-}
+import { prepareBackupFile, savePreparedBackup } from './backupFile';
 
 export function BackupPanel() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [preparedFile, setPreparedFile] = useState<File | null>(null);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
-  async function handleBackup() {
+  async function handlePrepareBackup() {
     setBusy(true);
     setMessage(null);
     try {
-      const backup = await buildBackup();
-      const file = new File([JSON.stringify(backup, null, 2)], backupFileName(), {
-        type: 'application/json',
-      });
-      const canShareFile =
-        typeof navigator.share === 'function' &&
-        typeof navigator.canShare === 'function' &&
-        navigator.canShare({ files: [file] });
-
-      if (canShareFile) {
-        try {
-          await navigator.share({ files: [file], title: 'Kelime Hafızam yedeği' });
-        } catch (error) {
-          if (error instanceof DOMException && error.name === 'AbortError') return;
-          downloadFile(file);
-        }
-      } else {
-        downloadFile(file);
-      }
-
-      await recordBackupCreated();
-      setMessage({ tone: 'success', text: 'Yedek hazırlandı. Güvenli bir yerde saklayın.' });
+      setPreparedFile(await prepareBackupFile());
+      setMessage({ tone: 'success', text: 'Yedek dosyası hazır. Şimdi “Kaydet / Paylaş”a dokunun.' });
     } catch (error) {
       setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Yedek oluşturulamadı.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveBackup() {
+    if (!preparedFile) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await savePreparedBackup(preparedFile);
+      setPreparedFile(null);
+      setMessage({ tone: 'success', text: 'Yedek kaydedildi. Güvenli bir yerde saklayın.' });
+    } catch (error) {
+      const cancelled = error instanceof DOMException && error.name === 'AbortError';
+      const permissionLost = error instanceof DOMException && error.name === 'NotAllowedError';
+      setMessage({
+        tone: 'error',
+        text: cancelled
+          ? 'Paylaşım iptal edildi. Hazır dosyayı yeniden kaydedebilirsiniz.'
+          : permissionLost
+            ? 'Paylaşım açılamadı. “Kaydet / Paylaş”a yeniden dokunun.'
+            : error instanceof Error
+              ? error.message
+              : 'Yedek kaydedilemedi.',
+      });
     } finally {
       setBusy(false);
     }
@@ -100,9 +94,14 @@ export function BackupPanel() {
         JSON yedeği kelimeleri ve ilerlemeyi içerir. Gemini API anahtarı hiçbir zaman yedeğe eklenmez.
       </p>
       <div className="button-row button-row--wrap">
-        <button className="primary-button" type="button" onClick={() => void handleBackup()} disabled={busy}>
-          Yedek al
+        <button className="primary-button" type="button" onClick={() => void handlePrepareBackup()} disabled={busy}>
+          Yedeği hazırla
         </button>
+        {preparedFile ? (
+          <button className="primary-button" type="button" onClick={() => void handleSaveBackup()} disabled={busy}>
+            Kaydet / Paylaş
+          </button>
+        ) : null}
         <button
           className="secondary-button"
           type="button"

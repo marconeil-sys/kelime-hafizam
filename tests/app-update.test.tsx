@@ -6,7 +6,13 @@ import {
   AppUpdatePrompt,
   AppUpdateProvider,
   type RegisterServiceWorker,
+  useBlockAppUpdatesWhile,
 } from '../src/ui/AppUpdate';
+
+function SessionState({ active }: { active: boolean }) {
+  useBlockAppUpdatesWhile(active);
+  return null;
+}
 
 describe('uygulama güncellemesi', () => {
   it('yeni sürümü otomatik uygulamaz, kullanıcı onayını bekler', async () => {
@@ -31,5 +37,30 @@ describe('uygulama güncellemesi', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Güncelle' }));
     expect(update).toHaveBeenCalledWith(true);
+  });
+
+  it('aktif öğrenme oturumunda şeridi gizler ve oturum bitince gösterir', async () => {
+    let announceUpdate: (() => void) | undefined;
+    const register: RegisterServiceWorker = (callbacks) => {
+      announceUpdate = callbacks.onNeedRefresh;
+      return vi.fn(async () => undefined);
+    };
+    const { rerender } = render(
+      <AppUpdateProvider>
+        <SessionState active />
+        <AppUpdatePrompt registerServiceWorker={register} />
+      </AppUpdateProvider>,
+    );
+    await act(async () => undefined);
+    act(() => announceUpdate?.());
+    expect(screen.queryByText('Yeni sürüm hazır')).not.toBeInTheDocument();
+
+    rerender(
+      <AppUpdateProvider>
+        <SessionState active={false} />
+        <AppUpdatePrompt registerServiceWorker={register} />
+      </AppUpdateProvider>,
+    );
+    expect(await screen.findByText('Yeni sürüm hazır')).toBeInTheDocument();
   });
 });

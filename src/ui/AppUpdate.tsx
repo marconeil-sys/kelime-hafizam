@@ -78,15 +78,14 @@ export function AppUpdatePrompt({
   if (!needRefresh && !offlineReady) return null;
 
   const sessionActive = Boolean(context?.learningSessionActive);
+  if (needRefresh && sessionActive) return null;
   return (
     <aside className="update-toast" role="status">
       <div>
         <strong>{needRefresh ? 'Yeni sürüm hazır' : 'Çevrimdışı kullanım hazır'}</strong>
         <p>
           {needRefresh
-            ? sessionActive
-              ? 'Güncellemek için önce çalışma oturumunu bitirin.'
-              : 'Uygulamayı güvenle güncelleyebilirsiniz.'
+            ? 'Uygulamayı güvenle güncelleyebilirsiniz.'
             : 'Uygulama ilk çevrimiçi açılıştan sonra internetsiz de açılabilir.'}
         </p>
       </div>
@@ -94,7 +93,7 @@ export function AppUpdatePrompt({
         <button
           className="primary-button"
           type="button"
-          disabled={sessionActive || !updateApp}
+          disabled={!updateApp}
           onClick={() => void updateApp?.()}
         >
           Güncelle

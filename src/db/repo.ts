@@ -30,6 +30,16 @@ export interface BatchAddResult {
   rejected: Array<{ term: string; reason: string }>;
 }
 
+export interface PhotoCandidateInput extends NewWordInput {
+  appendToExisting: boolean;
+}
+
+export interface PhotoSaveResult {
+  addedWords: number;
+  updatedWords: number;
+  duplicateWords: number;
+}
+
 function cleanOptional(value: string | undefined): string | undefined {
   const cleaned = value?.trim();
   return cleaned || undefined;
@@ -84,13 +94,26 @@ function asStoredWord(word: Word, id: number): StoredWord {
   return { ...word, id };
 }
 
+function rethrowRepositoryError(error: unknown, term: string): never {
+  if (error instanceof Error && error.name === 'ConstraintError') {
+    throw new DuplicateWordError(term);
+  }
+  throw error;
+}
+
 export async function addWord(input: NewWordInput, database: KelimeDatabase = db): Promise<StoredWord> {
   const word = makeNewWord(input);
-  const existing = await database.words.where('normalizedTerm').equals(word.normalizedTerm).first();
-  if (existing) throw new DuplicateWordError(input.term.trim());
+  try {
+    return await database.transaction('rw', database.words, async () => {
+      const existing = await database.words.where('normalizedTerm').equals(word.normalizedTerm).first();
+      if (existing) throw new DuplicateWordError(input.term.trim());
 
-  const id = await database.words.add(word);
-  return asStoredWord(word, id);
+      const id = await database.words.add(word);
+      return asStoredWord(word, id);
+    });
+  } catch (error) {
+    rethrowRepositoryError(error, word.term);
+  }
 }
 
 export async function addWords(
@@ -131,6 +154,49 @@ export async function addWords(
   return result;
 }
 
+export async function savePhotoCandidates(
+  inputs: PhotoCandidateInput[],
+  database: KelimeDatabase = db,
+): Promise<PhotoSaveResult> {
+  const result: PhotoSaveResult = { addedWords: 0, updatedWords: 0, duplicateWords: 0 };
+
+  await database.transaction('rw', database.words, async () => {
+    for (const input of inputs) {
+      const candidate = makeNewWord(input);
+      const existing = (await database.words
+        .where('normalizedTerm')
+        .equals(candidate.normalizedTerm)
+        .first()) as StoredWord | undefined;
+
+      if (!existing) {
+        await database.words.add(candidate);
+        result.addedWords += 1;
+        continue;
+      }
+
+      if (!input.appendToExisting) {
+        result.duplicateWords += 1;
+        continue;
+      }
+
+      const meanings = cleanMeanings([...existing.meanings, ...candidate.meanings]);
+      if (meanings.length === existing.meanings.length) {
+        result.duplicateWords += 1;
+        continue;
+      }
+      await database.words.put({
+        ...existing,
+        meanings,
+        partOfSpeech: existing.partOfSpeech ?? candidate.partOfSpeech,
+        exampleEn: existing.exampleEn ?? candidate.exampleEn,
+      });
+      result.updatedWords += 1;
+    }
+  });
+
+  return result;
+}
+
 export interface WordChanges {
   term?: string;
   meanings?: string[];
@@ -145,30 +211,36 @@ export async function updateWord(
   changes: WordChanges,
   database: KelimeDatabase = db,
 ): Promise<StoredWord> {
-  return database.transaction('rw', database.words, async () => {
-    const current = await database.words.get(id);
-    if (!current) throw new WordValidationError('Kelime bulunamadı.');
+  let attemptedTerm = changes.term?.trim() ?? '';
+  try {
+    return await database.transaction('rw', database.words, async () => {
+      const current = await database.words.get(id);
+      if (!current) throw new WordValidationError('Kelime bulunamadı.');
 
-    const next: Word = {
-      ...current,
-      ...changes,
-      term: (changes.term ?? current.term).trim(),
-      normalizedTerm: normalizeEn(changes.term ?? current.term),
-      meanings: cleanMeanings(changes.meanings ?? current.meanings),
-      partOfSpeech: cleanOptional(changes.partOfSpeech ?? current.partOfSpeech),
-      exampleEn: cleanOptional(changes.exampleEn ?? current.exampleEn),
-      id,
-    };
-    assertWordInvariant(next);
+      const next: Word = {
+        ...current,
+        ...changes,
+        term: (changes.term ?? current.term).trim(),
+        normalizedTerm: normalizeEn(changes.term ?? current.term),
+        meanings: cleanMeanings(changes.meanings ?? current.meanings),
+        partOfSpeech: cleanOptional(changes.partOfSpeech ?? current.partOfSpeech),
+        exampleEn: cleanOptional(changes.exampleEn ?? current.exampleEn),
+        id,
+      };
+      attemptedTerm = next.term;
+      assertWordInvariant(next);
 
-    const duplicate = await database.words.where('normalizedTerm').equals(next.normalizedTerm).first();
-    if (duplicate?.id !== undefined && duplicate.id !== id) {
-      throw new DuplicateWordError(next.term);
-    }
+      const duplicate = await database.words.where('normalizedTerm').equals(next.normalizedTerm).first();
+      if (duplicate?.id !== undefined && duplicate.id !== id) {
+        throw new DuplicateWordError(next.term);
+      }
 
-    await database.words.put(next);
-    return next as StoredWord;
-  });
+      await database.words.put(next);
+      return next as StoredWord;
+    });
+  } catch (error) {
+    rethrowRepositoryError(error, attemptedTerm);
+  }
 }
 
 export async function deleteWord(id: number, database: KelimeDatabase = db): Promise<void> {

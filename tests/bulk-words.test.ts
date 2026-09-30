@@ -13,4 +13,20 @@ describe('toplu kelime ayrıştırma', () => {
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]?.line).toBe(2);
   });
+
+  it('numaralı ve madde işaretli satırları temizler, kelimenin kendi sayısını korur', () => {
+    const result = parseBulkWords(
+      '1. run - koşmak\n12) walk - yürümek\n(3) go - gitmek\n- get up - kalkmak\n• look up - aramak\n2-way - iki yönlü',
+    );
+
+    expect(result.errors).toEqual([]);
+    expect(result.candidates.map((candidate) => candidate.term)).toEqual([
+      'run',
+      'walk',
+      'go',
+      'get up',
+      'look up',
+      '2-way',
+    ]);
+  });
 });

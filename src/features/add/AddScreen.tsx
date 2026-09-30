@@ -6,6 +6,7 @@ import { db } from '../../db/schema';
 import { FeatureCard } from '../../ui/FeatureCard';
 import { BulkAdd } from './BulkAdd';
 import { ManualAdd } from './ManualAdd';
+import { PhotoAdd } from './PhotoAdd';
 
 type AddMode = 'manual' | 'bulk' | null;
 
@@ -44,27 +45,8 @@ export function AddScreen() {
         </div>
       </div>
 
-      <div className="stack" aria-label="Kelime ekleme yöntemleri">
-        <FeatureCard
-          icon="📷"
-          title="Fotoğraftan ekle"
-          description="Kelime sayfasının fotoğrafını çek ve adayları birlikte kontrol et."
-          badge="Aşama 3"
-        >
-          <button className="secondary-button" type="button" disabled>
-            Yakında
-          </button>
-        </FeatureCard>
-        <FeatureCard
-          icon="▤"
-          title="Galeriden seç"
-          description="Telefonunda bulunan bir kelime sayfasını yükle."
-          badge="Aşama 3"
-        >
-          <button className="secondary-button" type="button" disabled>
-            Yakında
-          </button>
-        </FeatureCard>
+      <PhotoAdd />
+      <div className="stack add-manual-method" aria-label="Elle kelime ekleme yöntemi">
         <FeatureCard
           icon="✎"
           title="Elle veya toplu ekle"

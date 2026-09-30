@@ -9,12 +9,14 @@ export interface BulkParseResult {
   errors: Array<{ line: number; text: string; reason: string }>;
 }
 
+const LEADING_LIST_MARKER = /^\s*(?:\(?\d{1,4}[.):]\s*|\(?\d{1,4}-\s+|[-*•·▪◦]\s+)/u;
+
 export function parseBulkWords(text: string): BulkParseResult {
   const result: BulkParseResult = { candidates: [], errors: [] };
 
   text.split(/\r?\n/u).forEach((rawLine, index) => {
     const lineNumber = index + 1;
-    const line = rawLine.trim();
+    const line = rawLine.replace(LEADING_LIST_MARKER, '').trim();
     if (!line) return;
 
     const parts = line.split(/\s+(?:-|–|—)\s+|\t+|:\s+/u);

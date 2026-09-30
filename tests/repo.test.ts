@@ -5,6 +5,7 @@ import {
   addWords,
   DuplicateWordError,
   listWords,
+  savePhotoCandidates,
   updateWord,
   WordValidationError,
 } from '../src/db/repo';
@@ -57,5 +58,30 @@ describe('kelime deposu', () => {
       'achieve',
       'reliable',
     ]);
+  });
+
+  it('eşzamanlı aynı kelime ekleme yarışını DuplicateWordError olarak bildirir', async () => {
+    const results = await Promise.allSettled([
+      addWord({ term: 'race', meanings: ['yarış'] }, database),
+      addWord({ term: 'Race.', meanings: ['yarışmak'] }, database),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected).toMatchObject({ reason: expect.any(DuplicateWordError) });
+    expect(await database.words.count()).toBe(1);
+  });
+
+  it('fotoğraf adaylarını tek işlemde ekler ve farklı anlamı mevcut kelimeye ekler', async () => {
+    await addWord({ term: 'run', meanings: ['koşmak'] }, database);
+
+    const result = await savePhotoCandidates([
+      { term: 'walk', meanings: ['yürümek'], appendToExisting: false },
+      { term: 'run', meanings: ['çalıştırmak'], appendToExisting: true },
+    ], database);
+
+    expect(result).toEqual({ addedWords: 1, updatedWords: 1, duplicateWords: 0 });
+    const words = await listWords(database);
+    expect(words.find((word) => word.normalizedTerm === 'run')?.meanings).toEqual(['koşmak', 'çalıştırmak']);
   });
 });

@@ -1,4 +1,5 @@
 import { BackupPanel } from './BackupPanel';
+import { GeminiSettingsPanel } from './GeminiSettingsPanel';
 
 export function SettingsScreen() {
   return (
@@ -6,18 +7,10 @@ export function SettingsScreen() {
       <div className="section-heading">
         <p className="eyebrow">Uygulama tercihleri</p>
         <h2 id="settings-title">Ayarlar</h2>
-        <p>Yedeklerini yönet; ses ve Gemini tercihleri sonraki aşamalarda etkinleşecek.</p>
+        <p>Gemini bağlantını, uygulama tercihlerini ve yedeklerini yönet.</p>
       </div>
 
       <div className="settings-list">
-        <div className="setting-row">
-          <span className="setting-row__icon" aria-hidden="true">◇</span>
-          <div>
-            <strong>Gemini bağlantısı</strong>
-            <span>API anahtarı yalnız bu cihazda saklanacak</span>
-          </div>
-          <span className="badge">Aşama 3</span>
-        </div>
         <div className="setting-row">
           <span className="setting-row__icon" aria-hidden="true">◖</span>
           <div>
@@ -28,11 +21,12 @@ export function SettingsScreen() {
         </div>
       </div>
 
+      <GeminiSettingsPanel />
       <BackupPanel />
 
       <aside className="privacy-card">
         <strong>Gizlilik önce gelir</strong>
-        <p>Hesap ve sunucu yok. Gemini anahtarı kaynak koda veya yedek dosyasına yazılmayacak.</p>
+        <p>Hesap ve sunucu yok. Gemini anahtarı yalnız IndexedDB’de tutulur; kaynak koda, fotoğrafa veya yedek dosyasına yazılmaz.</p>
       </aside>
     </section>
   );

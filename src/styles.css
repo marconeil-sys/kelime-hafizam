@@ -233,6 +233,10 @@ p {
   font-size: 0.86rem;
 }
 
+.feature-card__body > .secondary-button {
+  margin-top: 0.75rem;
+}
+
 .badge {
   display: inline-flex;
   width: fit-content;
@@ -549,6 +553,133 @@ p {
   color: #b91c1c;
 }
 
+.photo-methods {
+  margin-bottom: 0.75rem;
+}
+
+.add-manual-method {
+  margin-top: 0.75rem;
+}
+
+.photo-progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.photo-progress p {
+  font-size: 0.82rem;
+}
+
+.candidate-review > .field-help {
+  margin: 0 0 0.8rem;
+}
+
+.candidate-summary {
+  margin-bottom: 0.7rem;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.candidate-card {
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface-muted);
+}
+
+.candidate-card--existing {
+  opacity: 0.72;
+}
+
+.candidate-card__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+}
+
+.candidate-card__heading input,
+.candidate-append input {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--primary);
+}
+
+.candidate-card__spacer {
+  width: 1.25rem;
+}
+
+.candidate-kind,
+.candidate-source {
+  padding: 0.22rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.67rem;
+  font-weight: 800;
+}
+
+.candidate-kind--new {
+  background: rgba(15, 159, 110, 0.12);
+  color: #087453;
+}
+
+.candidate-kind--existing {
+  background: rgba(107, 114, 128, 0.13);
+  color: var(--muted);
+}
+
+.candidate-kind--different {
+  background: rgba(217, 119, 6, 0.13);
+  color: #a15c05;
+}
+
+.candidate-source {
+  margin-left: auto;
+  background: rgba(79, 70, 229, 0.09);
+  color: var(--primary-dark);
+}
+
+.candidate-fields {
+  gap: 0.6rem;
+}
+
+.candidate-append {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.candidate-warning {
+  margin-top: 0.55rem;
+  color: var(--warning);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.settings-note {
+  margin: 1rem 0 0;
+  line-height: 1.5;
+}
+
+.settings-link {
+  display: inline-block;
+  margin-top: 0.65rem;
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
 .info-banner--warning {
   border-color: rgba(217, 119, 6, 0.22);
   background: rgba(217, 119, 6, 0.08);
@@ -726,6 +857,14 @@ p {
 
   .stack {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .photo-methods {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .add-manual-method {
+    grid-template-columns: 1fr;
   }
 
   .feature-card {

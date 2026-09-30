@@ -49,6 +49,14 @@ Yeni sürüm hazır olduğunda uygulama kendiliğinden sayfayı yenilemez. Ekran
 - Aynı İngilizce kelimenin normalleştirilmiş biçimi ikinci kez eklenmez.
 - Ayarlar ekranındaki JSON yedeği kelimeleri ve ilerlemeyi taşır; Gemini API anahtarı yedeğe dahil edilmez.
 
+## Fotoğraftan kelime ekleme
+
+1. [Google AI Studio](https://aistudio.google.com/app/apikey) üzerinden ücretsiz katman API anahtarı oluşturun. Anahtarın projesine faturalandırma hesabı bağlamayın.
+2. Uygulamada **Ayarlar → Gemini bağlantısı** bölümüne anahtarı yapıştırıp kaydedin ve **Anahtarı test et** düğmesini kullanın.
+3. **Ekle** ekranında kamerayı açın veya galeriden bir sayfa seçin; gelen kelime ve anlamları kontrol ederek kaydedin.
+
+Anahtar yalnız cihazın IndexedDB alanında tutulur; kaynak koda, üretim paketine ve yedek dosyasına girmez. Fotoğraf Gemini'ye gönderilmeden önce cihazda en uzun kenarı 2000 piksel olacak şekilde JPEG'e çevrilir ve uygulama tarafından saklanmaz. Ücretsiz katmanın kotası dolarsa istek reddedilir; uygulama ücretli isteğe geçmez.
+
 ## GitHub Pages
 
 `.github/workflows/deploy.yml`, `main` dalına her gönderimde kontrol, derleme ve Pages dağıtımı yapar. Vite taban yolu GitHub Actions'taki depo adından otomatik oluşturulur; HashRouter doğrudan bağlantı sorunlarını önler.
