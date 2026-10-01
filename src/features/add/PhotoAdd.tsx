@@ -35,6 +35,7 @@ export function PhotoAdd() {
       const response = await extractVocabularyFromImage({
         apiKey: settings.apiKey,
         model: settings.visionModel,
+        fallbackModel: settings.judgeModel,
         mimeType: image.mimeType,
         base64Data: image.base64Data,
         signal: controller.signal,

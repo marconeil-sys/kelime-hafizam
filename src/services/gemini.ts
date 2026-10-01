@@ -19,6 +19,13 @@ export class ServiceError extends GeminiServiceError {
   }
 }
 
+export class TemporaryServiceError extends ServiceError {
+  constructor() {
+    super('Gemini şu anda yoğun. Otomatik denemeler başarısız oldu; 1–2 dakika sonra aynı fotoğrafı yeniden seçin.');
+    this.name = 'TemporaryServiceError';
+  }
+}
+
 export type VisionPageType = 'word_list' | 'text' | 'mixed' | 'unreadable';
 
 export interface VisionItem {
@@ -43,6 +50,28 @@ interface GeminiRequest {
   validate: (value: unknown) => boolean;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  retryDelaysMs?: readonly number[];
+}
+
+const DEFAULT_RETRY_DELAYS_MS = [1_000, 2_000] as const;
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function waitForRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new DOMException('İstek iptal edildi.', 'AbortError'));
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', handleAbort);
+      resolve();
+    }, delayMs);
+    function handleAbort() {
+      window.clearTimeout(timer);
+      reject(new DOMException('İstek iptal edildi.', 'AbortError'));
+    }
+    signal?.addEventListener('abort', handleAbort, { once: true });
+  });
 }
 
 interface GeminiEnvelope {
@@ -117,31 +146,40 @@ async function generateJson(request: GeminiRequest): Promise<unknown> {
   if (!request.model.trim()) throw new ServiceError('Gemini model adı eksik.');
   const runFetch = request.fetchImpl ?? fetch;
 
-  let response: Response;
-  try {
-    response = await runFetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(request.model.trim())}:generateContent`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': request.apiKey.trim(),
-        },
-        body: JSON.stringify({
-          contents: [{ parts: request.parts }],
-          generationConfig: {
-            temperature: 0,
-            responseMimeType: 'application/json',
-            responseSchema: request.responseSchema,
-          },
-        }),
-        signal: request.signal,
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(request.model.trim())}:generateContent`;
+  const options: RequestInit = {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': request.apiKey.trim(),
+    },
+    body: JSON.stringify({
+      contents: [{ parts: request.parts }],
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json',
+        responseSchema: request.responseSchema,
       },
-    );
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    throw new ServiceError('Gemini bağlantısı kurulamadı. İnternet bağlantınızı kontrol edin.');
+    }),
+    signal: request.signal,
+  };
+  const retryDelays = request.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS.map(
+    (delay) => delay + Math.floor(Math.random() * 250),
+  );
+
+  let response: Response | undefined;
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+    try {
+      response = await runFetch(url, options);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      throw new ServiceError('Gemini bağlantısı kurulamadı. İnternet bağlantınızı kontrol edin.');
+    }
+    if (!isRetryableStatus(response.status)) break;
+    if (attempt === retryDelays.length) throw new TemporaryServiceError();
+    await waitForRetry(retryDelays[attempt]!, request.signal);
   }
+  if (!response) throw new ServiceError();
 
   if (response.status === 429) throw new QuotaError();
   if (!response.ok) {
@@ -180,22 +218,34 @@ export async function extractVocabularyFromImage(input: {
   model: string;
   mimeType: string;
   base64Data: string;
+  fallbackModel?: string;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  retryDelaysMs?: readonly number[];
 }): Promise<VisionResponse> {
-  const value = await generateJson({
-    apiKey: input.apiKey,
-    model: input.model,
-    parts: [
-      { inline_data: { mime_type: input.mimeType, data: input.base64Data } },
-      { text: VOCABULARY_PROMPT },
-    ],
-    responseSchema: VISION_RESPONSE_SCHEMA,
-    validate: isVisionResponse,
-    signal: input.signal,
-    fetchImpl: input.fetchImpl,
-  });
-  return value as VisionResponse;
+  const models = [...new Set([input.model.trim(), input.fallbackModel?.trim()].filter(Boolean))] as string[];
+  for (let index = 0; index < models.length; index += 1) {
+    try {
+      const value = await generateJson({
+        apiKey: input.apiKey,
+        model: models[index]!,
+        parts: [
+          { inline_data: { mime_type: input.mimeType, data: input.base64Data } },
+          { text: VOCABULARY_PROMPT },
+        ],
+        responseSchema: VISION_RESPONSE_SCHEMA,
+        validate: isVisionResponse,
+        signal: input.signal,
+        fetchImpl: input.fetchImpl,
+        retryDelaysMs: input.retryDelaysMs,
+      });
+      return value as VisionResponse;
+    } catch (error) {
+      const hasFallback = index < models.length - 1;
+      if (!(error instanceof TemporaryServiceError) || !hasFallback) throw error;
+    }
+  }
+  throw new TemporaryServiceError();
 }
 
 export async function testGeminiKey(input: {
