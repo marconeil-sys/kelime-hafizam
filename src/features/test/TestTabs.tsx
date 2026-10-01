@@ -5,6 +5,16 @@ const modes = [
 ] as const;
 
 export function TestTabs() {
+  const [wordCount, setWordCount] = useState(0);
+
+  useEffect(() => {
+    const subscription = liveQuery(() => db.words.count()).subscribe({
+      next: setWordCount,
+      error: () => setWordCount(0),
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
   return (
     <section aria-labelledby="test-title">
       <div className="section-heading">
@@ -29,11 +39,19 @@ export function TestTabs() {
 
       <div className="empty-state">
         <span className="empty-state__icon" aria-hidden="true">◎</span>
-        <h3>Henüz test edilecek kelime yok</h3>
-        <p>Önce Ekle sekmesinden çalışma listeni oluştur.</p>
+        <h3>{wordCount > 0 ? `${wordCount} kayıtlı kelime hazır` : 'Kelimelerim henüz boş'}</h3>
+        <p>
+          {wordCount > 0
+            ? 'Kelimeleriniz kaydedildi. Sesli flashcard ve grup testleri Aşama 5–6 tamamlandığında burada başlayacak.'
+            : 'Önce Ekle sekmesinden çalışma listeni oluştur. Sesli test akışı Aşama 5–6’da açılacak.'}
+        </p>
         <span className="badge">Aşama 5–6</span>
       </div>
     </section>
   );
 }
+import { useEffect, useState } from 'react';
+import { liveQuery } from 'dexie';
+
+import { db } from '../../db/schema';
 
