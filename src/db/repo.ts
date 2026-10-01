@@ -38,6 +38,7 @@ export interface PhotoSaveResult {
   addedWords: number;
   updatedWords: number;
   duplicateWords: number;
+  totalWords: number;
 }
 
 function cleanOptional(value: string | undefined): string | undefined {
@@ -158,7 +159,7 @@ export async function savePhotoCandidates(
   inputs: PhotoCandidateInput[],
   database: KelimeDatabase = db,
 ): Promise<PhotoSaveResult> {
-  const result: PhotoSaveResult = { addedWords: 0, updatedWords: 0, duplicateWords: 0 };
+  const result: PhotoSaveResult = { addedWords: 0, updatedWords: 0, duplicateWords: 0, totalWords: 0 };
 
   await database.transaction('rw', database.words, async () => {
     for (const input of inputs) {
@@ -192,6 +193,7 @@ export async function savePhotoCandidates(
       });
       result.updatedWords += 1;
     }
+    result.totalWords = await database.words.count();
   });
 
   return result;

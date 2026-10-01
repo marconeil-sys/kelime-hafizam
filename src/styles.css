@@ -430,6 +430,13 @@ p {
   color: white;
 }
 
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .secondary-button {
   padding: 0.65rem 0.9rem;
   border: 1px solid var(--line);

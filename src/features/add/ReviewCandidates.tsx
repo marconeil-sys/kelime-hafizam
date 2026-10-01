@@ -25,6 +25,10 @@ export function ReviewCandidates({ initialCandidates, onClose }: ReviewCandidate
   const newCount = candidates.filter((candidate) => candidate.kind === 'new').length;
   const existingCount = candidates.length - newCount;
   const hasActionableCandidate = candidates.some((candidate) => candidate.kind !== 'existing');
+  const selectedCount = candidates.filter((candidate) => {
+    const hasMeaning = meaningsFromText(candidate.meaningText).length > 0;
+    return hasMeaning && (candidate.kind === 'new' ? candidate.selected : candidate.appendMeaning);
+  }).length;
 
   function updateCandidate(id: string, changes: Partial<ReviewCandidate>) {
     setCandidates((current) => current.map((candidate) => (
@@ -57,7 +61,7 @@ export function ReviewCandidates({ initialCandidates, onClose }: ReviewCandidate
       const alreadyCount = candidates.filter((candidate) => candidate.kind !== 'new').length;
       setMessage({
         tone: 'success',
-        text: `${result.addedWords} yeni kelime eklendi, ${alreadyCount} zaten vardı${result.updatedWords ? `, ${result.updatedWords} kelimeye yeni anlam eklendi` : ''}.`,
+        text: `${result.addedWords} yeni kelime eklendi, ${alreadyCount} zaten vardı${result.updatedWords ? `, ${result.updatedWords} kelimeye yeni anlam eklendi` : ''}. Bu cihazda toplam ${result.totalWords} kelime var.`,
       });
       setCandidates([]);
     } catch (error) {
@@ -71,7 +75,10 @@ export function ReviewCandidates({ initialCandidates, onClose }: ReviewCandidate
     return (
       <section className="editor-panel" aria-label="Fotoğraf sonucu">
         {message ? <p className={`form-message form-message--${message.tone}`} role="status">{message.text}</p> : null}
-        <button className="primary-button" type="button" onClick={onClose}>Başka sayfa tara</button>
+        <div className="button-row button-row--wrap">
+          <a className="primary-button button-link" href="#/words">Kelimelerime git</a>
+          <button className="secondary-button" type="button" onClick={onClose}>Başka sayfa tara</button>
+        </div>
       </section>
     );
   }
@@ -145,7 +152,7 @@ export function ReviewCandidates({ initialCandidates, onClose }: ReviewCandidate
       <div className="button-row button-row--wrap">
         {hasActionableCandidate ? (
           <button className="primary-button" type="button" onClick={() => void handleSave()} disabled={saving}>
-            {saving ? 'Kaydediliyor…' : 'Seçilenleri kaydet'}
+            {saving ? 'Kaydediliyor…' : `Seçilenleri kaydet (${selectedCount})`}
           </button>
         ) : null}
         <button className="secondary-button" type="button" onClick={onClose} disabled={saving}>

@@ -80,7 +80,7 @@ describe('kelime deposu', () => {
       { term: 'run', meanings: ['çalıştırmak'], appendToExisting: true },
     ], database);
 
-    expect(result).toEqual({ addedWords: 1, updatedWords: 1, duplicateWords: 0 });
+    expect(result).toEqual({ addedWords: 1, updatedWords: 1, duplicateWords: 0, totalWords: 2 });
     const words = await listWords(database);
     expect(words.find((word) => word.normalizedTerm === 'run')?.meanings).toEqual(['koşmak', 'çalıştırmak']);
   });
