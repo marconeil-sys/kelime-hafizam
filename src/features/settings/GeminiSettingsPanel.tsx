@@ -6,7 +6,7 @@ import {
   getGeminiSettings,
   saveGeminiSettings,
 } from '../../db/settings';
-import { testGeminiKey } from '../../services/gemini';
+import { testGeminiModels } from '../../services/gemini';
 
 type Message = { tone: 'success' | 'error'; text: string };
 
@@ -51,8 +51,8 @@ export function GeminiSettingsPanel() {
     setBusy(true);
     setMessage(null);
     try {
-      await testGeminiKey({ apiKey, model: judgeModel });
-      setMessage({ tone: 'success', text: 'Gemini bağlantısı çalışıyor.' });
+      await testGeminiModels({ apiKey, visionModel, judgeModel });
+      setMessage({ tone: 'success', text: 'Fotoğraf okuma ve değerlendirme modelleri çalışıyor.' });
     } catch (error) {
       setMessage({ tone: 'error', text: error instanceof Error ? error.message : 'Bağlantı kurulamadı.' });
     } finally {

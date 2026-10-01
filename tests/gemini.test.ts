@@ -4,6 +4,7 @@ import {
   extractVocabularyFromImage,
   QuotaError,
   ServiceError,
+  testGeminiModels,
   TemporaryServiceError,
 } from '../src/services/gemini';
 
@@ -59,6 +60,30 @@ describe('Gemini servisi', () => {
     expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('/gemini-fallback:generateContent');
   });
 
+  it('ana modelin kotası dolarsa yedek modele geçer', async () => {
+    const payload = { page_type: 'word_list', items: [] };
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(new Response('{}', { status: 429 }))
+      .mockResolvedValueOnce(responseWithText(JSON.stringify(payload)));
+
+    await expect(extractVocabularyFromImage({
+      ...baseInput,
+      fallbackModel: 'gemini-fallback',
+      fetchImpl: fetchSpy as unknown as typeof fetch,
+    })).resolves.toEqual(payload);
+    expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('/gemini-fallback:generateContent');
+  });
+
+  it('ana ve yedek modelin ikisi de 429 verirse QuotaError döndürür', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 429 })) as unknown as typeof fetch;
+    await expect(extractVocabularyFromImage({
+      ...baseInput,
+      fallbackModel: 'gemini-fallback',
+      fetchImpl,
+    })).rejects.toBeInstanceOf(QuotaError);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('tüm yeniden denemeler tükenirse anlaşılır geçici servis hatası verir', async () => {
     const fetchImpl = vi.fn(async () => new Response('{}', { status: 503 })) as unknown as typeof fetch;
     await expect(extractVocabularyFromImage({
@@ -93,5 +118,37 @@ describe('Gemini servisi', () => {
         headers: expect.objectContaining({ 'x-goog-api-key': 'test-key-not-real' }),
       }),
     );
+  });
+
+  it('bozuk adayı atar, yüzde güvenini 0–1 aralığına çevirir ve geçerli adayı korur', async () => {
+    const payload = {
+      page_type: 'word_list',
+      items: [
+        { term: 'careful', meaning_tr_suggested: ['dikkatli'], confidence: 95 },
+        { term: 42, meaning_tr_suggested: ['bozuk'], confidence: 0.8 },
+      ],
+    };
+    const fetchImpl = vi.fn(async () => responseWithText(JSON.stringify(payload))) as unknown as typeof fetch;
+
+    await expect(extractVocabularyFromImage({ ...baseInput, fetchImpl })).resolves.toEqual({
+      page_type: 'word_list',
+      items: [{ term: 'careful', meaning_tr_suggested: ['dikkatli'], confidence: 0.95 }],
+    });
+  });
+
+  it('anahtar testinde iki modeli de dener ve hatalı modelin görevini belirtir', async () => {
+    const success = responseWithText('{"ok":true}');
+    const fetchSpy = vi.fn()
+      .mockResolvedValueOnce(success)
+      .mockResolvedValueOnce(new Response('{}', { status: 400 }));
+
+    await expect(testGeminiModels({
+      apiKey: 'key',
+      visionModel: 'vision-model',
+      judgeModel: 'judge-model',
+      fetchImpl: fetchSpy as unknown as typeof fetch,
+    })).rejects.toThrow('Değerlendirme modeli test edilemedi');
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/vision-model:generateContent');
+    expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('/judge-model:generateContent');
   });
 });

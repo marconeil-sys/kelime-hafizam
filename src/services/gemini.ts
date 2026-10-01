@@ -118,27 +118,57 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export function isVisionResponse(value: unknown): value is VisionResponse {
+function isVisionEnvelope(value: unknown): value is Record<string, unknown> & { items: unknown[] } {
   if (!isRecord(value)) return false;
   if (!['word_list', 'text', 'mixed', 'unreadable'].includes(String(value.page_type))) return false;
-  if (!Array.isArray(value.items)) return false;
-  return value.items.every((item) => {
-    if (!isRecord(item)) return false;
-    return (
-      typeof item.term === 'string' &&
-      (item.meaning_tr_on_page === null ||
-        item.meaning_tr_on_page === undefined ||
-        typeof item.meaning_tr_on_page === 'string') &&
-      Array.isArray(item.meaning_tr_suggested) &&
-      item.meaning_tr_suggested.every((meaning) => typeof meaning === 'string') &&
-      (item.part_of_speech === null || item.part_of_speech === undefined || typeof item.part_of_speech === 'string') &&
-      (item.example_en === null || item.example_en === undefined || typeof item.example_en === 'string') &&
-      typeof item.confidence === 'number' &&
-      Number.isFinite(item.confidence) &&
-      item.confidence >= 0 &&
-      item.confidence <= 1
-    );
+  return Array.isArray(value.items);
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Gemini bazen tek bir alanı şemadan farklı döndürebilir. Geçersiz tek adayın
+ * okunabilen bütün sayfayı düşürmesine izin vermeden adayları tek tek temizler.
+ */
+export function sanitizeVisionResponse(value: unknown): VisionResponse | null {
+  if (!isVisionEnvelope(value)) return null;
+
+  const items = value.items.flatMap((item): VisionItem[] => {
+    if (!isRecord(item) || typeof item.term !== 'string' || !item.term.trim()) return [];
+    if (
+      !Array.isArray(item.meaning_tr_suggested) ||
+      !item.meaning_tr_suggested.every((meaning) => typeof meaning === 'string') ||
+      typeof item.confidence !== 'number' ||
+      !Number.isFinite(item.confidence)
+    ) return [];
+
+    const meanings = item.meaning_tr_suggested.map((meaning) => meaning.trim()).filter(Boolean);
+    if (meanings.length === 0) return [];
+
+    let confidence = item.confidence;
+    if (confidence > 1) confidence /= 100;
+    confidence = Math.max(0, Math.min(1, confidence));
+
+    const meaningOnPage = optionalString(item.meaning_tr_on_page);
+    const partOfSpeech = optionalString(item.part_of_speech);
+    const exampleEn = optionalString(item.example_en);
+    return [{
+      term: item.term.trim(),
+      meaning_tr_suggested: meanings,
+      confidence,
+      ...(meaningOnPage ? { meaning_tr_on_page: meaningOnPage } : item.meaning_tr_on_page === null ? { meaning_tr_on_page: null } : {}),
+      ...(partOfSpeech ? { part_of_speech: partOfSpeech } : item.part_of_speech === null ? { part_of_speech: null } : {}),
+      ...(exampleEn ? { example_en: exampleEn } : item.example_en === null ? { example_en: null } : {}),
+    }];
   });
+
+  return { page_type: value.page_type as VisionPageType, items };
+}
+
+export function isVisionResponse(value: unknown): value is VisionResponse {
+  return sanitizeVisionResponse(value) !== null;
 }
 
 async function generateJson(request: GeminiRequest): Promise<unknown> {
@@ -234,15 +264,18 @@ export async function extractVocabularyFromImage(input: {
           { text: VOCABULARY_PROMPT },
         ],
         responseSchema: VISION_RESPONSE_SCHEMA,
-        validate: isVisionResponse,
+        validate: isVisionEnvelope,
         signal: input.signal,
         fetchImpl: input.fetchImpl,
         retryDelaysMs: input.retryDelaysMs,
       });
-      return value as VisionResponse;
+      const sanitized = sanitizeVisionResponse(value);
+      if (!sanitized) throw new ServiceError();
+      return sanitized;
     } catch (error) {
       const hasFallback = index < models.length - 1;
-      if (!(error instanceof TemporaryServiceError) || !hasFallback) throw error;
+      const canTryFallback = error instanceof TemporaryServiceError || error instanceof QuotaError;
+      if (!canTryFallback || !hasFallback) throw error;
     }
   }
   throw new TemporaryServiceError();
@@ -253,6 +286,7 @@ export async function testGeminiKey(input: {
   model: string;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  retryDelaysMs?: readonly number[];
 }): Promise<void> {
   const schema = {
     type: 'object',
@@ -268,5 +302,41 @@ export async function testGeminiKey(input: {
     validate: isTestResponse,
     signal: input.signal,
     fetchImpl: input.fetchImpl,
+    retryDelaysMs: input.retryDelaysMs,
   });
+}
+
+export async function testGeminiModels(input: {
+  apiKey: string;
+  visionModel: string;
+  judgeModel: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+  retryDelaysMs?: readonly number[];
+}): Promise<void> {
+  try {
+    await testGeminiKey({
+      apiKey: input.apiKey,
+      model: input.visionModel,
+      signal: input.signal,
+      fetchImpl: input.fetchImpl,
+      retryDelaysMs: input.retryDelaysMs,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Bilinmeyen hata.';
+    throw new ServiceError(`Fotoğraf okuma modeli test edilemedi: ${detail}`);
+  }
+
+  try {
+    await testGeminiKey({
+      apiKey: input.apiKey,
+      model: input.judgeModel,
+      signal: input.signal,
+      fetchImpl: input.fetchImpl,
+      retryDelaysMs: input.retryDelaysMs,
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Bilinmeyen hata.';
+    throw new ServiceError(`Değerlendirme modeli test edilemedi: ${detail}`);
+  }
 }

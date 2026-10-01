@@ -1,3 +1,4 @@
+import { AudioSettingsPanel } from './AudioSettingsPanel';
 import { BackupPanel } from './BackupPanel';
 import { GeminiSettingsPanel } from './GeminiSettingsPanel';
 
@@ -10,17 +11,7 @@ export function SettingsScreen() {
         <p>Gemini bağlantını, uygulama tercihlerini ve yedeklerini yönet.</p>
       </div>
 
-      <div className="settings-list">
-        <div className="setting-row">
-          <span className="setting-row__icon" aria-hidden="true">◖</span>
-          <div>
-            <strong>Ses ve aksan</strong>
-            <span>Amerikan İngilizcesi · en-US</span>
-          </div>
-          <span className="badge">Aşama 4</span>
-        </div>
-      </div>
-
+      <AudioSettingsPanel />
       <GeminiSettingsPanel />
       <BackupPanel />
 

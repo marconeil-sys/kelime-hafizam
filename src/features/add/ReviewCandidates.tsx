@@ -61,7 +61,7 @@ export function ReviewCandidates({ initialCandidates, onClose }: ReviewCandidate
       const alreadyCount = candidates.filter((candidate) => candidate.kind !== 'new').length;
       setMessage({
         tone: 'success',
-        text: `${result.addedWords} yeni kelime eklendi, ${alreadyCount} zaten vardı${result.updatedWords ? `, ${result.updatedWords} kelimeye yeni anlam eklendi` : ''}. Bu cihazda toplam ${result.totalWords} kelime var.`,
+        text: `${result.addedWords} yeni kelime eklendi, ${alreadyCount} zaten vardı${result.duplicateWords ? `, ${result.duplicateWords} seçili kelime listede olduğu için atlandı` : ''}${result.updatedWords ? `, ${result.updatedWords} kelimeye yeni anlam eklendi` : ''}. Bu cihazda toplam ${result.totalWords} kelime var.`,
       });
       setCandidates([]);
     } catch (error) {
