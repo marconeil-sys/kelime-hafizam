@@ -37,7 +37,7 @@ describe('metin seslendirme', () => {
     })).resolves.toBe('end');
   });
 
-  it('iOS onend göndermese bile tahmini süre + 1,5 saniyede çözülür', async () => {
+  it('onstart hiç gelmezse dört saniyede timeout olur', async () => {
     vi.useFakeTimers();
     const utterance = { onend: null, onerror: null } as unknown as SpeechSynthesisUtterance;
     const promise = speakText({
@@ -46,7 +46,54 @@ describe('metin seslendirme', () => {
       synth: { getVoices: () => [], cancel: vi.fn(), speak: vi.fn() },
       createUtterance: () => utterance,
     });
+    await vi.advanceTimersByTimeAsync(4_000);
+    await expect(promise).resolves.toBe('timeout');
+  });
+
+  it('gecikmeli onstart sonrasında sesi başlangıç zaman aşımında kesmez', async () => {
+    vi.useFakeTimers();
+    const utterance = { onstart: null, onend: null, onerror: null } as unknown as SpeechSynthesisUtterance;
+    const synth = {
+      getVoices: () => [],
+      cancel: vi.fn(),
+      speaking: false,
+      pending: false,
+      speak: vi.fn(() => {
+        window.setTimeout(() => utterance.onstart?.call(utterance, new Event('start') as SpeechSynthesisEvent), 1_800);
+        window.setTimeout(() => utterance.onend?.call(utterance, new Event('end') as SpeechSynthesisEvent), 2_600);
+      }),
+    };
+    const promise = speakText({
+      text: 'example',
+      lang: 'en-US',
+      synth,
+      createUtterance: () => utterance,
+    });
+
+    await vi.advanceTimersByTimeAsync(2_600);
+    await expect(promise).resolves.toBe('end');
+    expect(synth.cancel).not.toHaveBeenCalled();
+    expect(estimateSpeechDurationMs('example', 0.92)).toBeGreaterThan(0);
+  });
+
+  it('onstart sonrası güvenlik süresi dolarsa yalnız aktif konuşmayı durdurur', async () => {
+    vi.useFakeTimers();
+    const utterance = { onstart: null, onend: null, onerror: null } as unknown as SpeechSynthesisUtterance;
+    const synth = {
+      getVoices: () => [],
+      cancel: vi.fn(),
+      speaking: true,
+      pending: false,
+      speak: vi.fn(() => utterance.onstart?.call(utterance, new Event('start') as SpeechSynthesisEvent)),
+    };
+    const promise = speakText({
+      text: 'example',
+      lang: 'en-US',
+      synth,
+      createUtterance: () => utterance,
+    });
     await vi.advanceTimersByTimeAsync(estimateSpeechDurationMs('example', 0.92) + 1_500);
     await expect(promise).resolves.toBe('timeout');
+    expect(synth.cancel).toHaveBeenCalled();
   });
 });

@@ -11,7 +11,7 @@ export interface RecordedAudio {
   blob: Blob;
   mimeType: string;
   durationMs: number;
-  averageLevel: number;
+  averageLevel: number | null;
   isSilent: boolean;
 }
 
@@ -37,6 +37,10 @@ export function rootMeanSquareFromTimeDomain(values: Uint8Array): number {
     sum += normalized * normalized;
   }
   return Math.sqrt(sum / values.length);
+}
+
+export function isUsableRecordedAudio(durationMs: number, blobSize: number): boolean {
+  return durationMs >= 300 && blobSize > 0;
 }
 
 function defaultAudioContextConstructor(): AudioContextConstructor | undefined {
@@ -79,10 +83,13 @@ export async function recordAudioClip(input: {
   if (AudioContextClass) {
     try {
       audioContext = new AudioContextClass();
-      source = audioContext.createMediaStreamSource(stream);
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = 1_024;
-      source.connect(analyser);
+      await audioContext.resume();
+      if (audioContext.state === 'running') {
+        source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 1_024;
+        source.connect(analyser);
+      }
     } catch {
       analyser = undefined;
     }
@@ -132,15 +139,21 @@ export async function recordAudioClip(input: {
       settled = true;
       const averageLevel = levels.length > 0
         ? levels.reduce((total, level) => total + level, 0) / levels.length
-        : 1;
+        : null;
       const actualMimeType = recorder.mimeType || mimeType || 'application/octet-stream';
+      const durationMs = Date.now() - startedAt;
+      const blob = new Blob(chunks, { type: actualMimeType });
       cleanup();
+      if (!isUsableRecordedAudio(durationMs, blob.size)) {
+        reject(new AudioRecorderError('Kayıt çok kısa veya boş. Tekrar deneyin.'));
+        return;
+      }
       resolve({
-        blob: new Blob(chunks, { type: actualMimeType }),
+        blob,
         mimeType: actualMimeType,
-        durationMs: Date.now() - startedAt,
+        durationMs,
         averageLevel,
-        isSilent: levels.length > 0 && averageLevel < (input.silenceThreshold ?? 0.012),
+        isSilent: averageLevel !== null && averageLevel < (input.silenceThreshold ?? 0.012),
       });
     };
     input.signal?.addEventListener('abort', handleAbort, { once: true });

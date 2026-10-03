@@ -1,7 +1,16 @@
 import { liveQuery } from 'dexie';
 
 import { normalizeEn } from '../domain/normalize';
-import { db, type KelimeDatabase, type StoredWord, type Word, type WordGroup } from './schema';
+import { groupFromResult } from '../domain/grouping';
+import {
+  db,
+  type Attempt,
+  type KelimeDatabase,
+  type SessionMode,
+  type StoredWord,
+  type Word,
+  type WordGroup,
+} from './schema';
 
 export class WordValidationError extends Error {
   constructor(message: string) {
@@ -249,6 +258,56 @@ export async function deleteWord(id: number, database: KelimeDatabase = db): Pro
   await database.transaction('rw', database.words, database.attempts, async () => {
     await database.attempts.where('wordId').equals(id).delete();
     await database.words.delete(id);
+  });
+}
+
+export interface CompleteAttemptInput {
+  wordId: number;
+  sessionId: string;
+  mode: SessionMode;
+  pron: Attempt['pron'];
+  meaning: Attempt['meaning'];
+  invalidRetries: number;
+  at?: number;
+}
+
+export interface CompleteAttemptResult {
+  word: StoredWord;
+  attempt: Attempt & { id: number };
+}
+
+export async function completeWordAttempt(
+  input: CompleteAttemptInput,
+  database: KelimeDatabase = db,
+): Promise<CompleteAttemptResult> {
+  return database.transaction('rw', database.words, database.attempts, async () => {
+    const current = await database.words.get(input.wordId) as StoredWord | undefined;
+    if (!current) throw new WordValidationError('Test edilen kelime artık bulunamıyor.');
+    const at = input.at ?? Date.now();
+    const newGroup = groupFromResult(input.pron.correct, input.meaning.correct);
+    const attempt: Attempt = {
+      wordId: current.id,
+      sessionId: input.sessionId,
+      mode: input.mode,
+      pron: input.pron,
+      meaning: input.meaning,
+      invalidRetries: Math.max(0, Math.trunc(input.invalidRetries)),
+      prevGroup: current.group,
+      newGroup,
+      at,
+    };
+    const attemptId = await database.attempts.add(attempt);
+    const next: StoredWord = {
+      ...current,
+      status: 'tested',
+      group: newGroup,
+      lastTestedAt: at,
+      testCount: current.testCount + 1,
+      wrongCount: current.wrongCount + (input.pron.correct && input.meaning.correct ? 0 : 1),
+    };
+    assertWordInvariant(next);
+    await database.words.put(next);
+    return { word: next, attempt: { ...attempt, id: attemptId } };
   });
 }
 

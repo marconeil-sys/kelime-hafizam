@@ -894,6 +894,142 @@ p {
   clip-path: inset(50%);
 }
 
+.session-runner {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.session-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.25rem;
+}
+
+.session-toolbar > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.session-toolbar strong {
+  font-size: 1rem;
+}
+
+.session-toolbar span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.session-toolbar .filter-clear {
+  margin: 0;
+}
+
+.flashcard {
+  display: grid;
+  min-height: 15rem;
+  justify-items: center;
+  align-content: center;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1.6rem;
+  background: linear-gradient(150deg, var(--surface), var(--surface-muted));
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.flashcard h2 {
+  margin: 0.25rem 0 0.7rem;
+  font-size: clamp(2.2rem, 12vw, 4rem);
+  overflow-wrap: anywhere;
+}
+
+.listen-again {
+  margin-top: 1.1rem;
+}
+
+.session-main-action,
+.microphone-button {
+  width: 100%;
+  min-height: 3.5rem;
+}
+
+.microphone-button {
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--primary);
+  border-radius: 1rem;
+  background: #eeecff;
+  color: var(--primary-dark);
+  font-size: 1rem;
+  font-weight: 850;
+}
+
+.test-action-card,
+.feedback-card,
+.listening-status {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1.15rem;
+  background: var(--surface);
+}
+
+.test-action-card h3 {
+  margin-bottom: 0.65rem;
+  font-size: 1.05rem;
+}
+
+.listening-status {
+  color: var(--primary-dark);
+  font-weight: 850;
+  text-align: center;
+}
+
+.feedback-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.feedback-card--correct {
+  border-color: rgba(15, 159, 110, 0.32);
+  background: rgba(15, 159, 110, 0.08);
+}
+
+.feedback-card--wrong {
+  border-color: rgba(220, 38, 38, 0.25);
+  background: rgba(220, 38, 38, 0.06);
+}
+
+.feedback-card--correct > strong {
+  color: #087453;
+}
+
+.feedback-card--wrong > strong {
+  color: #b91c1c;
+}
+
+.feedback-card span,
+.feedback-card small {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.feedback-override {
+  width: fit-content;
+  padding: 0.2rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.session-start .primary-button,
+.session-complete .primary-button {
+  margin-top: 0.3rem;
+}
+
 @media (min-width: 620px) {
   .page-content {
     padding-right: 1.5rem;

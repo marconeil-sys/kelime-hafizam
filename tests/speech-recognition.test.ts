@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   probeSpeechRecognition,
@@ -10,6 +10,7 @@ import {
 
 function recognitionConstructor(
   start: (instance: SpeechRecognitionLike) => void,
+  stop: (instance: SpeechRecognitionLike) => void = () => undefined,
 ): SpeechRecognitionConstructor {
   return class FakeRecognition implements SpeechRecognitionLike {
     lang = '';
@@ -21,12 +22,13 @@ function recognitionConstructor(
     onerror: SpeechRecognitionLike['onerror'] = null;
     onend: (() => void) | null = null;
     start() { start(this); }
-    stop() { /* test taklidi */ }
+    stop() { stop(this); }
     abort() { /* test taklidi */ }
   };
 }
 
 describe('Web Speech sarmalayıcısı', () => {
+  afterEach(() => vi.useRealTimers());
   it('dili ve beş alternatifi ayarlayıp sonuçları döndürür', async () => {
     let configured: SpeechRecognitionLike | undefined;
     const Constructor = recognitionConstructor((instance) => {
@@ -65,10 +67,47 @@ describe('Web Speech sarmalayıcısı', () => {
   it('başlatılabilen motoru çalışıyor, izin reddini çalışmıyor sayar', async () => {
     const working = recognitionConstructor((instance) => instance.onstart?.());
     const denied = recognitionConstructor((instance) => instance.onerror?.({ error: 'not-allowed' }));
-    await expect(probeSpeechRecognition({ lang: 'en-US', Recognition: working })).resolves.toEqual({ working: true });
+    await expect(probeSpeechRecognition({ lang: 'en-US', Recognition: working, stabilityMs: 0 })).resolves.toEqual({ working: true });
     await expect(probeSpeechRecognition({ lang: 'en-US', Recognition: denied })).resolves.toEqual({
       working: false,
       reason: 'not-allowed',
     });
+  });
+
+  it('altı saniyelik sonda geç başlayan motoru kabul eder', async () => {
+    vi.useFakeTimers();
+    const late = recognitionConstructor((instance) => {
+      window.setTimeout(() => instance.onstart?.(), 2_000);
+    });
+    const promise = probeSpeechRecognition({ lang: 'en-US', Recognition: late });
+    await vi.advanceTimersByTimeAsync(3_000);
+    await expect(promise).resolves.toEqual({ working: true });
+  });
+
+  it('onstart sonrasındaki service-not-allowed hatasını yakalar', async () => {
+    vi.useFakeTimers();
+    const rejected = recognitionConstructor((instance) => {
+      instance.onstart?.();
+      window.setTimeout(() => instance.onerror?.({ error: 'service-not-allowed' }), 100);
+    });
+    const promise = probeSpeechRecognition({ lang: 'en-US', Recognition: rejected });
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(promise).resolves.toEqual({ working: false, reason: 'service-not-allowed' });
+  });
+
+  it('dinleme sınırında stop sonrası gelen son sonucu bir saniye bekler', async () => {
+    vi.useFakeTimers();
+    const Constructor = recognitionConstructor(
+      (instance) => instance.onstart?.(),
+      (instance) => window.setTimeout(() => instance.onresult?.({
+        results: {
+          0: { 0: { transcript: 'last second', confidence: 0.8 }, length: 1 },
+          length: 1,
+        },
+      }), 200),
+    );
+    const promise = recognizeOnce({ lang: 'en-US', Recognition: Constructor, maxDurationMs: 1_000 });
+    await vi.advanceTimersByTimeAsync(1_200);
+    await expect(promise).resolves.toEqual([{ transcript: 'last second', confidence: 0.8 }]);
   });
 });

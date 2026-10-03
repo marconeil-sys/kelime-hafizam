@@ -4,6 +4,7 @@ import {
   addWord,
   addWords,
   DuplicateWordError,
+  completeWordAttempt,
   listWords,
   savePhotoCandidates,
   updateWord,
@@ -83,5 +84,28 @@ describe('kelime deposu', () => {
     expect(result).toEqual({ addedWords: 1, updatedWords: 1, duplicateWords: 0, totalWords: 2 });
     const words = await listWords(database);
     expect(words.find((word) => word.normalizedTerm === 'run')?.meanings).toEqual(['koşmak', 'çalıştırmak']);
+  });
+
+  it.each([
+    [true, true, 1],
+    [false, true, 2],
+    [true, false, 3],
+    [false, false, 4],
+  ] as const)('tamamlanan kartı telaffuz=%s anlam=%s için Grup %s yapar', async (pron, meaning, group) => {
+    const word = await addWord({ term: `word-${group}`, meanings: ['anlam'] }, database);
+    const result = await completeWordAttempt({
+      wordId: word.id,
+      sessionId: `session-${group}`,
+      mode: 'general',
+      pron: { correct: pron, heard: word.term, method: 'webspeech', overridden: false },
+      meaning: { correct: meaning, transcript: 'anlam', method: 'match', overridden: false },
+      invalidRetries: 2,
+      at: 10_000 + group,
+    }, database);
+
+    expect(result.word).toMatchObject({ status: 'tested', group, testCount: 1 });
+    expect(result.word.wrongCount).toBe(group === 1 ? 0 : 1);
+    expect(result.attempt).toMatchObject({ prevGroup: null, newGroup: group, invalidRetries: 2 });
+    expect(await database.attempts.count()).toBe(1);
   });
 });

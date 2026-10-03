@@ -34,6 +34,15 @@ export function resolvePronunciationMode(input: {
   return 'manual';
 }
 
+export function fallbackAfterWebSpeechFailures(input: {
+  consecutiveFailures: number;
+  audioRecording: boolean;
+  hasGeminiKey: boolean;
+}): ActivePronunciationMode | null {
+  if (input.consecutiveFailures < 2) return null;
+  return input.audioRecording && input.hasGeminiKey ? 'gemini' : 'manual';
+}
+
 export function detectStaticCapabilities(scope: typeof globalThis = globalThis): StaticCapabilities {
   const navigatorLike = scope.navigator;
   const Recorder = scope.MediaRecorder;

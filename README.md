@@ -57,6 +57,16 @@ Yeni sürüm hazır olduğunda uygulama kendiliğinden sayfayı yenilemez. Ekran
 
 Anahtar yalnız cihazın IndexedDB alanında tutulur; kaynak koda, üretim paketine ve yedek dosyasına girmez. Fotoğraf Gemini'ye gönderilmeden önce cihazda en uzun kenarı 2000 piksel olacak şekilde JPEG'e çevrilir ve uygulama tarafından saklanmaz. Ücretsiz katmanın kotası dolarsa istek reddedilir; uygulama ücretli isteğe geçmez.
 
+## Sesli flashcard testi
+
+- Kelime, seçilen `en-US` veya `en-GB` cihaz sesiyle okunur; mikrofon düğmesi ancak seslendirme tamamlandıktan sonra açılır.
+- Otomatik mod önce Web Speech kullanır. Aynı oturumda iki ardışık servis hatası olursa Gemini ses kaydına, o hazır değilse elle değerlendirmeye geçer.
+- Telaffuz ve Türkçe anlam ayrı değerlendirilir. Sessizlik, izin reddi, ağ veya kota hatası yanlış cevap olarak kaydedilmez.
+- İki geçerli sonuç tamamlandıktan sonra kart tek IndexedDB transaction'ında deneme geçmişine yazılır ve kelime Grup 1–4'e atanır.
+- Gemini'ye gönderilen ses yalnız o değerlendirme isteği için bellekte tutulur; uygulama ham ses kaydını IndexedDB'ye veya yedeğe yazmaz.
+
+Günlük taramanın 10'ar kelimelik sabit listesi ve yarım oturum devamı Aşama 6 kapsamındadır.
+
 ## GitHub Pages
 
 `.github/workflows/deploy.yml`, `main` dalına her gönderimde kontrol, derleme ve Pages dağıtımı yapar. Vite taban yolu GitHub Actions'taki depo adından otomatik oluşturulur; HashRouter doğrudan bağlantı sorunlarını önler.

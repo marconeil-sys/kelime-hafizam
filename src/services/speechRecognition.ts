@@ -103,9 +103,11 @@ export function recognizeOnce(input: {
   return new Promise((resolve, reject) => {
     const recognition = new Constructor();
     let settled = false;
-    let timer: number | undefined;
+    let listeningTimer: number | undefined;
+    let resultGraceTimer: number | undefined;
     const cleanup = () => {
-      if (timer !== undefined) window.clearTimeout(timer);
+      if (listeningTimer !== undefined) window.clearTimeout(listeningTimer);
+      if (resultGraceTimer !== undefined) window.clearTimeout(resultGraceTimer);
       input.signal?.removeEventListener('abort', handleAbort);
       recognition.onstart = null;
       recognition.onresult = null;
@@ -128,10 +130,13 @@ export function recognizeOnce(input: {
     recognition.interimResults = false;
     recognition.continuous = false;
     const startTimeout = () => {
-      if (timer !== undefined) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
+      if (listeningTimer !== undefined) window.clearTimeout(listeningTimer);
+      listeningTimer = window.setTimeout(() => {
         recognition.stop();
-        finishError(new SpeechRecognitionAttemptError('no-speech'));
+        resultGraceTimer = window.setTimeout(
+          () => finishError(new SpeechRecognitionAttemptError('no-speech')),
+          1_000,
+        );
       }, input.maxDurationMs ?? 5_000);
     };
     recognition.onstart = startTimeout;
@@ -175,6 +180,7 @@ export interface RecognitionProbeResult {
 export function probeSpeechRecognition(input: {
   lang: string;
   timeoutMs?: number;
+  stabilityMs?: number;
   Recognition?: SpeechRecognitionConstructor;
 }): Promise<RecognitionProbeResult> {
   const Constructor = input.Recognition ?? getSpeechRecognitionConstructor();
@@ -183,10 +189,13 @@ export function probeSpeechRecognition(input: {
   return new Promise((resolve) => {
     const recognition = new Constructor();
     let settled = false;
+    let started = false;
+    let stabilityTimer: number | undefined;
     const finish = (result: RecognitionProbeResult) => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(timer);
+      window.clearTimeout(startupTimer);
+      if (stabilityTimer !== undefined) window.clearTimeout(stabilityTimer);
       recognition.onstart = null;
       recognition.onerror = null;
       recognition.onend = null;
@@ -197,13 +206,25 @@ export function probeSpeechRecognition(input: {
     recognition.maxAlternatives = 5;
     recognition.interimResults = false;
     recognition.continuous = false;
-    recognition.onstart = () => finish({ working: true });
+    recognition.onstart = () => {
+      started = true;
+      window.clearTimeout(startupTimer);
+      stabilityTimer = window.setTimeout(
+        () => finish({ working: true }),
+        input.stabilityMs ?? 1_000,
+      );
+    };
     recognition.onerror = (event) => {
       const reason = asErrorCode(event.error);
       finish(reason === 'no-speech' ? { working: true } : { working: false, reason });
     };
-    recognition.onend = () => finish({ working: false, reason: 'unknown' });
-    const timer = window.setTimeout(() => finish({ working: false, reason: 'timeout' }), input.timeoutMs ?? 1_500);
+    recognition.onend = () => finish(started
+      ? { working: true }
+      : { working: false, reason: 'unknown' });
+    const startupTimer = window.setTimeout(
+      () => finish({ working: false, reason: 'timeout' }),
+      input.timeoutMs ?? 6_000,
+    );
     try {
       recognition.start();
     } catch {

@@ -9,6 +9,7 @@ export const TURKISH_VOICE_KEY = 'turkishVoiceURI';
 export const SPOKEN_FEEDBACK_KEY = 'spokenFeedback';
 export const PRONUNCIATION_MODE_KEY = 'pronunciationMode';
 export const AUTO_ADVANCE_KEY = 'autoAdvance';
+export const CAPABILITY_REPORT_KEY = 'capabilityReport';
 
 export const DEFAULT_VISION_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_JUDGE_MODEL = 'gemini-3.5-flash-lite';
@@ -29,6 +30,17 @@ export interface AudioSettings {
   spokenFeedback: boolean;
   pronunciationMode: PronunciationModePreference;
   autoAdvance: boolean;
+}
+
+export type SavedPronunciationMode = 'webspeech' | 'gemini' | 'manual';
+
+export interface SavedCapabilityReport {
+  activeMode: SavedPronunciationMode;
+  reason: string;
+  accent: EnglishAccent;
+  testedAt: number;
+  textToSpeech: boolean;
+  audioRecording: boolean;
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
@@ -123,4 +135,30 @@ export async function saveAudioSettings(
     },
     { key: AUTO_ADVANCE_KEY, value: settings.autoAdvance },
   ]);
+}
+
+export async function getSavedCapabilityReport(
+  database: KelimeDatabase = db,
+): Promise<SavedCapabilityReport | null> {
+  const setting = await database.settings.get(CAPABILITY_REPORT_KEY);
+  const value = setting?.value;
+  if (typeof value !== 'object' || value === null) return null;
+  const report = value as Partial<SavedCapabilityReport>;
+  if (
+    !['webspeech', 'gemini', 'manual'].includes(String(report.activeMode)) ||
+    typeof report.reason !== 'string' ||
+    (report.accent !== 'en-US' && report.accent !== 'en-GB') ||
+    typeof report.testedAt !== 'number' ||
+    !Number.isFinite(report.testedAt) ||
+    typeof report.textToSpeech !== 'boolean' ||
+    typeof report.audioRecording !== 'boolean'
+  ) return null;
+  return report as SavedCapabilityReport;
+}
+
+export async function saveCapabilityReport(
+  report: SavedCapabilityReport,
+  database: KelimeDatabase = db,
+): Promise<void> {
+  await database.settings.put({ key: CAPABILITY_REPORT_KEY, value: report });
 }

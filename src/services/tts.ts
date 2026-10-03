@@ -9,6 +9,8 @@ interface SpeechSynthesisLike {
   getVoices: () => SpeechSynthesisVoice[];
   speak: (utterance: SpeechSynthesisUtterance) => void;
   cancel: () => void;
+  speaking?: boolean;
+  pending?: boolean;
   addEventListener?: (type: string, listener: EventListener) => void;
   removeEventListener?: (type: string, listener: EventListener) => void;
 }
@@ -93,39 +95,55 @@ export async function speakText(input: {
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let startupTimer: number | undefined;
+    let playbackTimer: number | undefined;
+    const clearTimers = () => {
+      if (startupTimer !== undefined) window.clearTimeout(startupTimer);
+      if (playbackTimer !== undefined) window.clearTimeout(playbackTimer);
+    };
+    const cancelIfActive = () => {
+      if (synth.speaking || synth.pending) synth.cancel();
+    };
     const finish = (result: 'end' | 'timeout') => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(timer);
+      clearTimers();
       input.signal?.removeEventListener('abort', handleAbort);
       resolve(result);
     };
     const fail = () => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(timer);
+      clearTimers();
       input.signal?.removeEventListener('abort', handleAbort);
       reject(new TextToSpeechError());
     };
     const handleAbort = () => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(timer);
-      synth.cancel();
+      clearTimers();
+      cancelIfActive();
       reject(new DOMException('Seslendirme iptal edildi.', 'AbortError'));
     };
-    const timer = window.setTimeout(
+    startupTimer = window.setTimeout(
       () => {
         finish('timeout');
-        synth.cancel();
       },
-      estimateSpeechDurationMs(input.text, utterance.rate) + 1_500,
+      4_000,
     );
+    utterance.onstart = () => {
+      if (settled) return;
+      if (startupTimer !== undefined) window.clearTimeout(startupTimer);
+      playbackTimer = window.setTimeout(() => {
+        finish('timeout');
+        cancelIfActive();
+      }, estimateSpeechDurationMs(input.text, utterance.rate) + 1_500);
+    };
     utterance.onend = () => finish('end');
     utterance.onerror = () => fail();
     input.signal?.addEventListener('abort', handleAbort, { once: true });
     try {
-      synth.cancel();
+      cancelIfActive();
       synth.speak(utterance);
     } catch {
       fail();

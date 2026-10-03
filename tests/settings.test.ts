@@ -8,6 +8,8 @@ import {
   getGeminiSettings,
   getAudioSettings,
   saveAudioSettings,
+  getSavedCapabilityReport,
+  saveCapabilityReport,
   saveGeminiSettings,
 } from '../src/db/settings';
 import { KelimeDatabase } from '../src/db/schema';
@@ -76,6 +78,20 @@ describe('ses ayarları', () => {
     };
     await saveAudioSettings(settings, database);
     await expect(getAudioSettings(database)).resolves.toEqual(settings);
+  });
+
+  it('son cihaz testi sonucunu sonraki oturum için saklar', async () => {
+    expect(await getSavedCapabilityReport(database)).toBeNull();
+    const report = {
+      activeMode: 'gemini' as const,
+      reason: 'timeout',
+      accent: 'en-US' as const,
+      testedAt: 123_456,
+      textToSpeech: true,
+      audioRecording: true,
+    };
+    await saveCapabilityReport(report, database);
+    await expect(getSavedCapabilityReport(database)).resolves.toEqual(report);
   });
 });
 

@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   extractVocabularyFromImage,
+  judgeMeaningAudio,
+  judgeMeaningText,
+  judgePronunciationAudio,
   QuotaError,
   ServiceError,
   testGeminiModels,
@@ -136,6 +139,20 @@ describe('Gemini servisi', () => {
     });
   });
 
+  it('sayfada basılı anlam varsa öneri listesi boş olsa da adayı korur', async () => {
+    const payload = {
+      page_type: 'word_list',
+      items: [{
+        term: 'book',
+        meaning_tr_on_page: 'kitap',
+        meaning_tr_suggested: [],
+        confidence: 0.99,
+      }],
+    };
+    const fetchImpl = vi.fn(async () => responseWithText(JSON.stringify(payload))) as unknown as typeof fetch;
+    await expect(extractVocabularyFromImage({ ...baseInput, fetchImpl })).resolves.toEqual(payload);
+  });
+
   it('anahtar testinde iki modeli de dener ve hatalı modelin görevini belirtir', async () => {
     const success = responseWithText('{"ok":true}');
     const fetchSpy = vi.fn()
@@ -150,5 +167,41 @@ describe('Gemini servisi', () => {
     })).rejects.toThrow('Değerlendirme modeli test edilemedi');
     expect(String(fetchSpy.mock.calls[0]?.[0])).toContain('/vision-model:generateContent');
     expect(String(fetchSpy.mock.calls[1]?.[0])).toContain('/judge-model:generateContent');
+  });
+
+  it('telaffuz sesini structured JSON ile değerlendirir', async () => {
+    const payload = { heard: 'run', verdict: 'correct', feedback_tr: '' };
+    const fetchSpy = vi.fn(async (_url: RequestInfo | URL, _init?: RequestInit) => responseWithText(JSON.stringify(payload)));
+    await expect(judgePronunciationAudio({
+      apiKey: 'key',
+      model: 'judge',
+      term: 'run',
+      accent: 'en-US',
+      audio: new Blob(['voice']),
+      mimeType: 'audio/webm',
+      fetchImpl: fetchSpy as unknown as typeof fetch,
+    })).resolves.toEqual(payload);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body)) as {
+      contents: Array<{ parts: Array<Record<string, unknown>> }>;
+    };
+    expect(body.contents[0]?.parts[0]).toHaveProperty('inline_data');
+  });
+
+  it('Türkçe anlamı hem metinden hem sesten değerlendirebilir', async () => {
+    const payload = {
+      transcript: 'koşmak',
+      verdict: 'correct',
+      reason_tr: 'Eş anlamlı.',
+      is_new_valid_meaning: false,
+    };
+    const fetchImpl = vi.fn(async () => responseWithText(JSON.stringify(payload))) as unknown as typeof fetch;
+    await expect(judgeMeaningText({
+      apiKey: 'key', model: 'judge', term: 'run', meanings: ['koşmak'], transcripts: ['koşmak'], fetchImpl,
+    })).resolves.toEqual(payload);
+    await expect(judgeMeaningAudio({
+      apiKey: 'key', model: 'judge', term: 'run', meanings: ['koşmak'],
+      audio: new Blob(['voice']), mimeType: 'audio/mp4', fetchImpl,
+    })).resolves.toEqual(payload);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });

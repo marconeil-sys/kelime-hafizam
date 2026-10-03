@@ -5,6 +5,7 @@ import {
   getAudioSettings,
   getGeminiSettings,
   saveAudioSettings,
+  saveCapabilityReport,
   type AudioSettings,
 } from '../../db/settings';
 import { detectDeviceCapabilities, type CapabilityReport } from '../../services/capabilities';
@@ -91,6 +92,16 @@ export function AudioSettingsPanel() {
         accent: settings.accent,
         hasGeminiKey,
       });
+      await saveCapabilityReport({
+        activeMode: nextReport.activeMode,
+        reason: nextReport.recognitionProbe.working
+          ? 'webspeech-working'
+          : nextReport.recognitionProbe.reason ?? 'unknown',
+        accent: settings.accent,
+        testedAt: Date.now(),
+        textToSpeech: nextReport.textToSpeech,
+        audioRecording: nextReport.audioRecording,
+      });
       setReport(nextReport);
       setMessage({ tone: 'success', text: `Cihaz testi tamamlandı: ${modeLabel(nextReport)} seçildi.` });
     } catch (error) {
@@ -121,7 +132,7 @@ export function AudioSettingsPanel() {
     <section className="settings-panel" aria-labelledby="audio-settings-title">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Aşama 4</p>
+          <p className="eyebrow">Sesli çalışma</p>
           <h3 id="audio-settings-title">Ses, mikrofon ve test modu</h3>
         </div>
         <span className="setting-row__icon" aria-hidden="true">◖</span>

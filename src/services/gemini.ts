@@ -42,6 +42,19 @@ export interface VisionResponse {
   items: VisionItem[];
 }
 
+export interface PronunciationJudgeResponse {
+  heard: string;
+  verdict: 'correct' | 'incorrect' | 'unclear';
+  feedback_tr: string;
+}
+
+export interface MeaningJudgeResponse {
+  transcript: string;
+  verdict: 'correct' | 'incorrect' | 'unsure';
+  reason_tr: string;
+  is_new_valid_meaning: boolean;
+}
+
 interface GeminiRequest {
   apiKey: string;
   model: string;
@@ -118,6 +131,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isPronunciationJudgeResponse(value: unknown): value is PronunciationJudgeResponse {
+  return isRecord(value)
+    && typeof value.heard === 'string'
+    && (value.verdict === 'correct' || value.verdict === 'incorrect' || value.verdict === 'unclear')
+    && typeof value.feedback_tr === 'string';
+}
+
+function isMeaningJudgeResponse(value: unknown): value is MeaningJudgeResponse {
+  return isRecord(value)
+    && typeof value.transcript === 'string'
+    && (value.verdict === 'correct' || value.verdict === 'incorrect' || value.verdict === 'unsure')
+    && typeof value.reason_tr === 'string'
+    && typeof value.is_new_valid_meaning === 'boolean';
+}
+
 function isVisionEnvelope(value: unknown): value is Record<string, unknown> & { items: unknown[] } {
   if (!isRecord(value)) return false;
   if (!['word_list', 'text', 'mixed', 'unreadable'].includes(String(value.page_type))) return false;
@@ -145,13 +173,13 @@ export function sanitizeVisionResponse(value: unknown): VisionResponse | null {
     ) return [];
 
     const meanings = item.meaning_tr_suggested.map((meaning) => meaning.trim()).filter(Boolean);
-    if (meanings.length === 0) return [];
+    const meaningOnPage = optionalString(item.meaning_tr_on_page);
+    if (meanings.length === 0 && !meaningOnPage) return [];
 
     let confidence = item.confidence;
     if (confidence > 1) confidence /= 100;
     confidence = Math.max(0, Math.min(1, confidence));
 
-    const meaningOnPage = optionalString(item.meaning_tr_on_page);
     const partOfSpeech = optionalString(item.part_of_speech);
     const exampleEn = optionalString(item.example_en);
     return [{
@@ -339,4 +367,139 @@ export async function testGeminiModels(input: {
     const detail = error instanceof Error ? error.message : 'Bilinmeyen hata.';
     throw new ServiceError(`Değerlendirme modeli test edilemedi: ${detail}`);
   }
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buffer = typeof blob.arrayBuffer === 'function'
+    ? await blob.arrayBuffer()
+    : await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(new ServiceError('Ses kaydı okunamadı.'));
+      reader.readAsArrayBuffer(blob);
+    });
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 32_768;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+const PRONUNCIATION_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    heard: { type: 'string' },
+    verdict: { type: 'string', enum: ['correct', 'incorrect', 'unclear'] },
+    feedback_tr: { type: 'string' },
+  },
+  required: ['heard', 'verdict', 'feedback_tr'],
+};
+
+const MEANING_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  properties: {
+    transcript: { type: 'string' },
+    verdict: { type: 'string', enum: ['correct', 'incorrect', 'unsure'] },
+    reason_tr: { type: 'string' },
+    is_new_valid_meaning: { type: 'boolean' },
+  },
+  required: ['transcript', 'verdict', 'reason_tr', 'is_new_valid_meaning'],
+};
+
+export async function judgePronunciationAudio(input: {
+  apiKey: string;
+  model: string;
+  term: string;
+  accent: string;
+  audio: Blob;
+  mimeType: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+  retryDelaysMs?: readonly number[];
+}): Promise<PronunciationJudgeResponse> {
+  const prompt = `You are an English pronunciation examiner for a Turkish learner.
+Target: ${JSON.stringify(input.term)} (${input.accent}). Listen to the audio.
+Return JSON matching the schema.
+"correct": a native listener would clearly recognise the target and the main vowels/stress are acceptable; a Turkish accent is fine.
+"incorrect": a different word, wrong stress or clearly wrong vowel/consonant.
+"unclear": silence, noise, or speech not attempting the target.
+feedback_tr: one short Turkish tip, empty if correct.`;
+  return await generateJson({
+    apiKey: input.apiKey,
+    model: input.model,
+    parts: [
+      { inline_data: { mime_type: input.mimeType, data: await blobToBase64(input.audio) } },
+      { text: prompt },
+    ],
+    responseSchema: PRONUNCIATION_SCHEMA,
+    validate: isPronunciationJudgeResponse,
+    signal: input.signal,
+    fetchImpl: input.fetchImpl,
+    retryDelaysMs: input.retryDelaysMs,
+  }) as PronunciationJudgeResponse;
+}
+
+function meaningPrompt(term: string, meanings: readonly string[], transcriptInstruction: string): string {
+  return `English word: ${JSON.stringify(term)}.
+Accepted Turkish meanings: ${JSON.stringify(meanings)}.
+${transcriptInstruction}
+Return JSON matching the schema.
+"correct" if the learner's answer means the same as any accepted meaning OR is a genuine common Turkish translation of the word.
+"unsure" if the answer is too garbled to judge.
+Set is_new_valid_meaning=true only for a correct, common translation not already in the accepted list.
+reason_tr: one short Turkish explanation.`;
+}
+
+export async function judgeMeaningText(input: {
+  apiKey: string;
+  model: string;
+  term: string;
+  meanings: readonly string[];
+  transcripts: readonly string[];
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+  retryDelaysMs?: readonly number[];
+}): Promise<MeaningJudgeResponse> {
+  return await generateJson({
+    apiKey: input.apiKey,
+    model: input.model,
+    parts: [{ text: meaningPrompt(
+      input.term,
+      input.meanings,
+      `Learner said (speech-to-text, may contain recognition errors): ${JSON.stringify(input.transcripts)}. Put the best transcript in "transcript".`,
+    ) }],
+    responseSchema: MEANING_SCHEMA,
+    validate: isMeaningJudgeResponse,
+    signal: input.signal,
+    fetchImpl: input.fetchImpl,
+    retryDelaysMs: input.retryDelaysMs,
+  }) as MeaningJudgeResponse;
+}
+
+export async function judgeMeaningAudio(input: {
+  apiKey: string;
+  model: string;
+  term: string;
+  meanings: readonly string[];
+  audio: Blob;
+  mimeType: string;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+  retryDelaysMs?: readonly number[];
+}): Promise<MeaningJudgeResponse> {
+  return await generateJson({
+    apiKey: input.apiKey,
+    model: input.model,
+    parts: [
+      { inline_data: { mime_type: input.mimeType, data: await blobToBase64(input.audio) } },
+      { text: meaningPrompt(input.term, input.meanings, 'Transcribe the learner audio into Turkish and put it in "transcript".') },
+    ],
+    responseSchema: MEANING_SCHEMA,
+    validate: isMeaningJudgeResponse,
+    signal: input.signal,
+    fetchImpl: input.fetchImpl,
+    retryDelaysMs: input.retryDelaysMs,
+  }) as MeaningJudgeResponse;
 }
